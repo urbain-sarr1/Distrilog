@@ -1,0 +1,9 @@
+fastapi
+pydantic
+uvicorn
+sqlalchemy
+psycopg[binary]
+httpx
+pika
+tenacity
+pybreaker

@@ -1,0 +1,149 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+
+  pg-catalogue:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: distrilog
+      POSTGRES_PASSWORD: distrilog
+      POSTGRES_DB: catalogue
+    volumes:
+      - catalogue_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U distrilog -d catalogue"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  pg-stock:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: distrilog
+      POSTGRES_PASSWORD: distrilog
+      POSTGRES_DB: stock
+    volumes:
+      - stock_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U distrilog -d stock"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  pg-commande:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: distrilog
+      POSTGRES_PASSWORD: distrilog
+      POSTGRES_DB: commande
+    volumes:
+      - commande_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U distrilog -d commande"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  pg-livraison:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: distrilog
+      POSTGRES_PASSWORD: distrilog
+      POSTGRES_DB: livraison
+    volumes:
+      - livraison_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U distrilog -d livraison"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+
+  catalogue:
+    build:
+      context: .
+      args:
+        SERVICE: catalogue
+    environment:
+      DATABASE_URL: postgresql+psycopg://distrilog:distrilog@pg-catalogue:5432/catalogue
+      STOCK_DATABASE_URL: postgresql+psycopg://distrilog:distrilog@pg-stock:5432/stock
+    ports:
+      - "8001:8000"
+    depends_on:
+      pg-catalogue:
+        condition: service_healthy
+      pg-stock:
+        condition: service_healthy
+
+  stock:
+    build:
+      context: .
+      args:
+        SERVICE: stock
+    environment:
+      DATABASE_URL: postgresql+psycopg://distrilog:distrilog@pg-stock:5432/stock
+      RABBIT_HOST: rabbitmq
+      SEUIL_STOCK_BAS: "5"
+    ports:
+      - "8002:8000"
+    depends_on:
+      pg-stock:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  commande:
+    build:
+      context: .
+      args:
+        SERVICE: commande
+    environment:
+      DATABASE_URL: postgresql+psycopg://distrilog:distrilog@pg-commande:5432/commande
+      CATALOGUE_URL: http://catalogue:8000
+      STOCK_URL: http://stock:8000
+      RABBIT_HOST: rabbitmq
+    ports:
+      - "8003:8000"
+    depends_on:
+      pg-commande:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      catalogue:
+        condition: service_started
+      stock:
+        condition: service_started
+
+  livraison:
+    build:
+      context: .
+      args:
+        SERVICE: livraison
+    environment:
+      DATABASE_URL: postgresql+psycopg://distrilog:distrilog@pg-livraison:5432/livraison
+      RABBIT_HOST: rabbitmq
+    ports:
+      - "8004:8000"
+    depends_on:
+      pg-livraison:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  catalogue_data:
+  stock_data:
+  commande_data:
+  livraison_data:
